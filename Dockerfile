@@ -1,4 +1,5 @@
-FROM alpine:3.11 as builder
+FROM alpine:3.21.3 as builder
+ENV releaseversion=r3_11_0
 
 RUN \
  echo "**** updating system packages ****" && \
@@ -16,11 +17,12 @@ RUN \
 WORKDIR /tmp
 RUN \
  echo "**** getting source code ****" && \
-   wget "https://github.com/jamulussoftware/jamulus/archive/latest.tar.gz" && \
-   tar xzf latest.tar.gz
+   wget "https://github.com/jamulussoftware/jamulus/archive/refs/tags/${releaseversion}.tar.gz" -O jamulus-${releaseversion}.tar.gz && \
+   tar xzf jamulus-${releaseversion}.tar.gz && \
+   mv jamulus-${releaseversion} jamulus
 
 # Github directory format for tar.gz export
-WORKDIR /tmp/jamulus-latest
+WORKDIR /tmp/jamulus
 RUN \
  echo "**** compiling source code ****" && \
    qmake "CONFIG+=nosound headless" Jamulus.pro && \
@@ -30,7 +32,7 @@ RUN \
    rm -rf /tmp/* && \
    apk del .build-dependencies
 
-FROM alpine:3.11
+FROM alpine:3.21.3
 
 RUN apk add --update --no-cache \
     qt5-qtbase-x11 icu-libs tzdata
