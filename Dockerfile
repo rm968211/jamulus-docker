@@ -1,5 +1,5 @@
-FROM alpine:3.21.3 as builder
-ENV releaseversion=r3_11_0
+FROM alpine:3.23.4 as builder
+ENV releaseversion=r3_12_0
 
 RUN \
  echo "**** updating system packages ****" && \
@@ -32,7 +32,7 @@ RUN \
    rm -rf /tmp/* && \
    apk del .build-dependencies
 
-FROM alpine:3.21.3
+FROM alpine:3.23.4
 
 RUN apk add --update --no-cache \
     qt5-qtbase-x11 icu-libs tzdata
