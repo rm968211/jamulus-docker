@@ -1,0 +1,77 @@
+name: Build and Push Jamulus Docker Image
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # Daily at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Build even if this version already exists on DockerHub"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get latest Jamulus release
+        id: version
+        run: |
+          VERSION=$(curl -sSf https://api.github.com/repos/jamulussoftware/jamulus/releases/latest \
+            | jq -r '.tag_name')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest Jamulus: ${VERSION}"
+
+      - name: Check if image version already exists on DockerHub
+        id: check
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/jamulus/tags/${VERSION}")
+          if [[ "$HTTP" == "200" && "${{ github.event.inputs.force_build }}" != "true" ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Image already exists for ${VERSION}, skipping build."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Will build image for ${VERSION}."
+          fi
+
+      - name: Checkout repo
+        if: steps.check.outputs.skip == 'false'
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check.outputs.skip == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            releaseversion=${{ steps.version.outputs.version }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/jamulus:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/jamulus:latest
+
+      - name: Summary
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          SKIP=${{ steps.check.outputs.skip }}
+          if [[ "$SKIP" == "true" ]]; then
+            echo "### Skipped — ${{ secrets.DOCKERHUB_USERNAME }}/jamulus:${VERSION} already on DockerHub" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Pushed ${{ secrets.DOCKERHUB_USERNAME }}/jamulus" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
+          fi
